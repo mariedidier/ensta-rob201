@@ -10,12 +10,13 @@ def reactive_obst_avoid(lidar):
     lidar : placebot object with lidar data
     """
     # TODO for TP1
-    speed = 1.0
-    val=lidar.get_sensor_values()[180]
-    print(val)
+    speed = 0.5
+    val=lidar.get_sensor_values()[135:225]
+    min_val=min(val)
+    print(min_val)
     rotation_speed = 0.0
-    if val<100:
-        speed=-1.0
+    if min_val<50:
+        speed=-0.5
         rotation_speed = 1.0
         
     
@@ -37,45 +38,50 @@ def potential_field_control(lidar, current_pose, goal_pose):
     on initial pose, x forward, y on left)
     """
     # TODO for TP2
-    d = np.sqrt((goal_pose[0]-current_pose[0])**2 +(goal_pose[1]-current_pose[1])**2)
-    K=1
-    gradient=(K/d)*(goal_pose-current_pose)
-    speed=0.0
-    rotation_speed=0
+    d_to_goal = np.linalg.norm (current_pose[0:2]-goal_pose[0:2])
+    print(d_to_goal)
 
-    if d > 1:  # Threshold distance for stopping
-        # Compute angle between current orientation and gradient direction
-        theta = current_pose[2]
-        angle_to_gradient = np.arctan2(gradient[1], gradient[0]) - theta
+
+    K_goal=0.5
+    d_goal_reached = 20
+
+    # Gradient to goal 
+    if d_to_goal > d_goal_reached:  
+        gradient_goal=(K_goal/d_to_goal)*(goal_pose-current_pose)
+    else :
+        gradient_goal=(K_goal/d_goal_reached)*(goal_pose-current_pose)
         
-        # Limit angle to be between -pi and pi
-        if angle_to_gradient > np.pi:
-            angle_to_gradient -= 2 * np.pi
-        elif angle_to_gradient < -np.pi:
-            angle_to_gradient += 2 * np.pi
-        
-        # Define rotation speed proportional to the angle to the gradient
-        rotation_speed = 1.0 * angle_to_gradient
-        
-        # Limit rotation speed
-        if rotation_speed > 1.0:
-            rotation_speed = 1.0
-        elif rotation_speed < -1.0:
-            rotation_speed = -1.0
-            
-        # Adjust linear speed based on the distance to the goal
-        speed = min(0.5, d)  # Limit the speed to 0.5
+    
+    #gradient from obstacle
+    d_to_obs,ang_to_obs=min(zip(lidar.get_sensor_values(),lidar.get_ray_angles()))
+    
+    obs_x=d_to_obs*np.cos(ang_to_obs)
+    obs_y=d_to_obs*np.sin(ang_to_obs)
+    obs_pose = [obs_x,obs_y,ang_to_obs]
+
+    print(obs_pose)
+    d_crash = 50
+    K_obs = 1000
+    if d_to_obs < d_crash :
+        gradient_obstacle = K_obs /d_to_obs**3 * (1/d_to_obs - 1/d_crash) * (obs_pose - current_pose)
+    else :
+        gradient_obstacle = 0
+
+
+    gradient = gradient_goal - gradient_obstacle
+    #print(gradient_obstacle)
+
+    #The closer the obstacle, the stronger the rotation
+    alpha= 1 #20*d_crash/d_to_obs**2
+
+    speed = max(-0.9999,min(0.999999,np.linalg.norm(gradient[0:2])))
+    #print(speed)
+    rotation_speed = max(-0.99999,min(0.99999,alpha*(gradient[2]-current_pose[2])))
+    #print(rotation_speed)
+
     command = {"forward": speed,
                "rotation": rotation_speed}
 
     return command    
-"""
-    if grad[2]<0:
-        rotation_speed=0.2
-    elif grad[2]>0:
-        rotation_speed=-0.2
-    if d<=50:
-        speed=0
-        rotation_speed=0
-    """
+
         
